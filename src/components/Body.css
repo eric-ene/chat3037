@@ -1,0 +1,24 @@
+.body {
+    margin: 10px;
+    height: 100%;
+    
+    display: grid;
+    gap: 5px;
+    grid-template-columns: auto;
+    grid-template-rows: max-content max-content auto;
+}
+
+.connectbar {
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: min-content auto min-content;
+    grid-template-rows: min-content;
+}
+
+.connectbar > p {
+    margin-top: 5px;
+}
+
+.connectbar > input {
+    align-self: stretch;
+}

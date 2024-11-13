@@ -1,0 +1,98 @@
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  height: 100%;
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+#root {
+  height: 100%;
+}
+
+body {
+  height: 100%;
+}
+
+* {
+  padding: 0;
+  margin: 0;
+}
+
+.topbar {
+  padding: 10px;
+  color: white;
+  background: rebeccapurple;
+}
+
+#title {
+  display: inline-flex;
+}
+
+#login {
+  font-weight: lighter;
+  
+  display: inline-flex;
+  float: right;
+  padding-top: 8px;
+}
+
+input, button {
+  font-size: 16px;
+  
+  padding: 3px;
+  margin-left: 5px;
+  
+  border-radius: 3px;
+}
+
+.no-border {
+  border: none;
+}
+
+input:focus {
+  outline: none;
+}
+
+.purple-border {
+  border: 2px solid rebeccapurple;
+  color: rebeccapurple;
+}
+
+button {
+  border: none;
+  padding: 5px 10px 5px 10px;
+  background: rebeccapurple;
+  color: white;
+  font-weight: lighter;
+}
+
+button:hover {
+  background: mediumpurple;
+}
+
+button:active {
+  background: rebeccapurple;
+}
+
+.align-bottom {
+  align-self: flex-end;
+}
+
+.fill-available {
+  flex-grow: 1;
+  justify-content: center;
+  align-self: stretch;
+}
+
+.fit-content {
+  white-space: nowrap;
+  width: fit-content;
+}
+
+.margin5 {
+  margin: 5px;
+}
