@@ -1,4 +1,4 @@
-use std::net::UdpSocket;
+use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::sync::Mutex;
 use tauri::Manager;
 use rand::random;
@@ -16,11 +16,12 @@ pub const MAGIC_COOKIE: u32 = 0x2112A442;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let socket = UdpSocket::bind("0.0.0.0:0").expect("couldn't bind to socket!");
+  let socket = TcpListener::bind("0.0.0.0:0").expect("couldn't bind to socket!");
 
   let transaction_id = random::<[u8; 12]>();
   let request = stun_request(1, 0, transaction_id);
-  socket.send_to(&request, STUN_SERVER).expect("couldn't send STUN request!");
+  let mut stream = TcpStream::connect(STUN_SERVER);
+  // socket.send_to(&request, STUN_SERVER).expect("couldn't send STUN request!");
 
   let addr = parse_stun(&socket, MAGIC_COOKIE.to_be_bytes());
   println!("your code: {}", addr.as_sequence());
