@@ -16,16 +16,19 @@ pub const MAGIC_COOKIE: u32 = 0x2112A442;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let socket = TcpListener::bind("0.0.0.0:0").expect("couldn't bind to socket!");
+  let socket = UdpSocket::bind("0.0.0.0:0").expect("couldn't bind to socket!");
 
   let transaction_id = random::<[u8; 12]>();
   let request = stun_request(1, 0, transaction_id);
-  let mut stream = TcpStream::connect(STUN_SERVER);
-  // socket.send_to(&request, STUN_SERVER).expect("couldn't send STUN request!");
+
+  socket.send_to(&request, STUN_SERVER).expect("couldn't send STUN request!");
 
   let addr = parse_stun(&socket, MAGIC_COOKIE.to_be_bytes());
   println!("your code: {}", addr.as_sequence());
   
+  drop(socket);
+  let listener = TcpListener::bind(format!("0.0.0.0:{}", addr.port_str())).unwrap();
+
   tauri::Builder::default()
     .setup(
       move |app| {
@@ -35,7 +38,9 @@ pub fn run() {
               session: Session {
                 src: Some(addr),
                 dst: None,
-                sock: socket
+                listener,
+                in_stream: None,
+                out_stream: None,
               }
             }
           )

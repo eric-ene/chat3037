@@ -72,6 +72,10 @@ impl Addr {
 
     Ok(Self { addr, port })
   }
+
+  pub fn port_str(&self) -> String {
+    return format!("{}", u16::from_be_bytes(self.port));
+  }
 }
 
 impl fmt::Display for Addr {
@@ -95,7 +99,7 @@ impl ToSocketAddrs for Addr {
   type Iter = IntoIter<SocketAddr>;
 
   fn to_socket_addrs(&self) -> std::io::Result<Self::Iter> {
-    match format!("{}", self).to_socket_addrs() {
+    match self.to_string().to_socket_addrs() {
       Ok(iter) =>  Ok(iter),
       Err(e) => Err(e)
     }

@@ -1,5 +1,7 @@
 use std::net::UdpSocket;
 use std::sync::{LockResult, Mutex};
+use std::thread::sleep;
+use std::time::Duration;
 use tauri::State;
 use crate::appstate::addr::Addr;
 use crate::appstate::context::Context;
@@ -18,9 +20,11 @@ pub fn generate_identifier(state: State<'_, Mutex<Context>>) -> String {
 
 pub fn parse_stun(socket: &UdpSocket, tid: [u8; 4]) -> Addr {
   let mut response = [0_u8; 512];
-  let _ = socket
+  while socket
     .recv(&mut response)
-    .expect("error receiving response from STUN server");
+    .expect("error receiving response from STUN server") <= 0 {
+    sleep(Duration::from_secs_f32(0.1));
+  }
 
   let res = &response[26..32];
 
