@@ -1,6 +1,7 @@
 use std::{io::Write, net::{TcpListener, TcpStream, UdpSocket}};
 use std::io::{ErrorKind, Read};
 use std::string::FromUtf8Error;
+use std::time::Duration;
 use crate::appstate::addr::Addr;
 
 pub struct Session {
@@ -40,7 +41,7 @@ impl Session {
       Some(val) => val
     };
     
-    self.out_stream = Some(match TcpStream::connect(dst) {
+    self.out_stream = Some(match TcpStream::connect_timeout(&dst.addr(), Duration::from_secs(5)) {
       Ok(stream) => stream,
       Err(e) => return Err(e.to_string())
     });
