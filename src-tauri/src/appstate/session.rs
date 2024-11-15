@@ -1,25 +1,28 @@
 use std::{io::Write, net::{TcpListener, TcpStream, UdpSocket}};
 use std::io::{ErrorKind, Read};
 use std::string::FromUtf8Error;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use crate::appstate::addr::Addr;
 
 pub struct Session {
   pub src: Option<Addr>,
   pub dst: Option<Addr>,
-  pub listener: TcpListener,
+  pub listener: Arc<Mutex<TcpListener>>,
   pub out_stream: Option<TcpStream>,
-  pub in_stream: Option<TcpStream>
+  pub in_stream: Option<TcpStream>,
+  pub incoming: Arc<Mutex<Vec<Option<TcpStream>>>>,
 }
 
 impl Session {
-  pub fn new(addr: Addr, listener: TcpListener) -> Self {
+  pub fn new(src_addr: Addr, listener: Arc<Mutex<TcpListener>>, incoming: Arc<Mutex<Vec<Option<TcpStream>>>>) -> Self {
     return Self {
-      src: Some(addr),
+      src: Some(src_addr),
       dst: None,
       listener,
       in_stream: None,
       out_stream: None,
+      incoming
     };
   }
   
@@ -59,24 +62,7 @@ impl Session {
   }
 
   pub fn accept(&mut self) -> Result<(), std::io::Error> {
-    for connection in self.listener.incoming() {
-      match connection {
-        Ok(stream) => match stream.peer_addr() {
-          Ok(addr) => match self.dst {
-            Some(dst) => {
-              if addr.to_string() == dst.to_string() {
-                unimplemented!()
-              }
-            }
-            None => return Err(std::io::Error::new(ErrorKind::NotConnected, "dst not set."))
-          }
-          Err(e) => return Err(std::io::Error::new(ErrorKind::AddrNotAvailable, "Can't get other address!"))
-        }
-        Err(_) => continue
-      }
-    }
-    
-    return Err(std::io::Error::new(ErrorKind::NotFound, "No incoming connection from dst"));
+    unimplemented!()
   }
 
   pub fn read(&mut self) -> Result<String, std::io::Error> {

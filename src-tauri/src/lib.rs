@@ -1,15 +1,18 @@
 use std::net::{TcpListener, TcpStream, UdpSocket};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use tauri::Manager;
 use rand::random;
 use crate::appstate::context::Context;
 use crate::appstate::session::Session;
+use crate::threads::ThreadManager;
 use crate::utils::{parse_stun, stun_request};
 
 mod utils;
 mod appstate;
 mod helpers;
 mod data;
+mod threads;
 
 const STUN_SERVER: &str = "stun.l.google.com:19302";
 pub const MAGIC_COOKIE: u32 = 0x2112A442;
@@ -27,21 +30,18 @@ pub fn run() {
   println!("your code: {}", addr.as_sequence());
   
   drop(socket);
-  let listener = TcpListener::bind(format!("0.0.0.0:{}", addr.port_str())).unwrap();
-
+  let listener = Arc::new(Mutex::new(TcpListener::bind(format!("0.0.0.0:{}", addr.port_str())).unwrap()));
+  let incoming = Arc::new(Mutex::new(Vec::new()));
+  
+  let handle = ThreadManager::listen(listener.clone(), incoming.clone());
+  
   tauri::Builder::default()
     .setup(
       move |app| {
         app.manage(
           Mutex::new(
             Context {
-              session: Session {
-                src: Some(addr),
-                dst: None,
-                listener,
-                in_stream: None,
-                out_stream: None,
-              }
+              session: Session::new(addr, listener.clone(), incoming.clone())
             }
           )
         );
@@ -56,4 +56,6 @@ pub fn run() {
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+  
+  let _ = handle.join();
 }
