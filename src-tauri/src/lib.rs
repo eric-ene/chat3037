@@ -1,39 +1,20 @@
-use std::net::{TcpListener, TcpStream, UdpSocket};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use tauri::Manager;
-use rand::random;
+use std::collections::VecDeque;
 use crate::appstate::context::Context;
 use crate::appstate::session::Session;
-use crate::threads::ThreadManager;
-use crate::utils::{parse_stun, stun_request};
+use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
+use tauri::Manager;
 
-mod utils;
 mod appstate;
 mod helpers;
-mod data;
 mod threads;
 
-const STUN_SERVER: &str = "stun.l.google.com:19302";
-pub const MAGIC_COOKIE: u32 = 0x2112A442;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let socket = UdpSocket::bind("0.0.0.0:0").expect("couldn't bind to socket!");
-
-  let transaction_id = random::<[u8; 12]>();
-  let request = stun_request(1, 0, transaction_id);
-
-  socket.send_to(&request, STUN_SERVER).expect("couldn't send STUN request!");
-
-  let addr = parse_stun(&socket, MAGIC_COOKIE.to_be_bytes());
-  println!("your code: {}", addr.as_sequence());
+  let incoming = Arc::new(Mutex::new(VecDeque::new()));
   
-  drop(socket);
-  let listener = Arc::new(Mutex::new(TcpListener::bind(format!("0.0.0.0:{}", addr.port_str())).unwrap()));
-  let incoming = Arc::new(Mutex::new(Vec::new()));
-  
-  let handle = ThreadManager::listen(listener.clone(), incoming.clone());
+  let handle = threads::connect_and_listen("chat.ericalexander.ca:8081".to_string(), incoming.clone());
   
   tauri::Builder::default()
     .setup(
@@ -41,7 +22,7 @@ pub fn run() {
         app.manage(
           Mutex::new(
             Context {
-              session: Session::new(addr, listener.clone(), incoming.clone())
+              session: Session::new(incoming.clone())
             }
           )
         );
@@ -51,7 +32,7 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
-      utils::generate_identifier,
+      helpers::network::get_identifier,
       helpers::network::try_connect,
     ])
     .run(tauri::generate_context!())

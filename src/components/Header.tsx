@@ -7,11 +7,16 @@ export default function Header() {
     
     useEffect(() => {
         async function applyId() {
-            const val = await invoke<string>("generate_identifier")
-            setId(val)
+            invoke<string>("get_identifier")
+                .then((val) => {
+                    setId(val);
+                    console.log(val)
+                })
+                .catch((err) => console.error(err))
         }
         
         applyId()
+            .catch(console.error);
     });
     
     return (
@@ -21,7 +26,7 @@ export default function Header() {
                 <p>Name:</p>
                 <input type={"text"} defaultValue={"user"} className={"no-border"}/>
             </div>
-            <p>Your ID: {id}</p>
+            <p>Your ID is "{id}"</p>
         </div>
     );
 }

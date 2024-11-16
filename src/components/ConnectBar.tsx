@@ -40,7 +40,7 @@ async function handleClick(
         })
         .catch((error: string) => {
             setConnecting(false)
-            message(`Error doing handshake\n${error}`, { 
+            message(`Error connecting to target\n${error}`, { 
                 title: "Connection Error",
                 type: "warning",
             })
