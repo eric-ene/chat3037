@@ -1,7 +1,11 @@
+use std::net::TcpStream;
 use crate::appstate::context::Context;
-use crate::helpers::packet::{PacketType, ProcessedPacket};
-use std::sync::Mutex;
+use std::sync::{Arc, LockResult, Mutex, MutexGuard};
+use std::thread::sleep;
+use std::time::Duration;
+use chat_shared::packet::ProcessedPacket;
 use tauri::State;
+use crate::appstate::session;
 
 #[tauri::command]
 pub async fn get_identifier(state: State<'_, Mutex<Context>>) -> Result<String, String> {
@@ -9,12 +13,12 @@ pub async fn get_identifier(state: State<'_, Mutex<Context>>) -> Result<String, 
     Ok(guard) => guard,
     Err(e) => return Err(e.to_string()),
   };
-  
+
   let mut incoming = match ctx.session.incoming.lock() {
     Ok(guard) => guard,
     Err(e) => return Err(e.to_string()),
   };
-  
+
   let mut marked = Vec::new();
   let mut retval: Result<String, String> = Err(
     "No name packet found. This is likely becuase \
@@ -23,7 +27,6 @@ pub async fn get_identifier(state: State<'_, Mutex<Context>>) -> Result<String, 
   );
   
   for (index, packet) in incoming.iter().enumerate() {
-    println!("{:?}", packet);
     match packet {
       ProcessedPacket::Assign(p) => {
         // do stuff with the packet
@@ -35,20 +38,22 @@ pub async fn get_identifier(state: State<'_, Mutex<Context>>) -> Result<String, 
       _ => ()
     }
   }
-  
+
   marked.sort_unstable();
   marked.reverse();
-  
+
   // remove processed packets
   for index in marked {
     incoming.remove(index);
   }
-  
+
   return retval;
 }
 
 #[tauri::command]
-pub fn try_connect(state: State<'_, Mutex<Context>>, seq: String) -> Result<String, String> {
+pub fn try_connect(state: State<'_, Mutex<Context>>, seq: String, name: String) -> Result<String, String> {
   let mut ctx = state.lock().expect("couldn't lock state mutex!");
+
+  
   return Err(String::from("Unimplemented"));
 }

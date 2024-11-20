@@ -483,6 +483,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 name = "chat3037_new"
 version = "0.1.0"
 dependencies = [
+ "chat_shared",
  "rand 0.7.3",
  "serde",
  "serde_json",
@@ -490,6 +491,14 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tauri-plugin-shell",
+]
+
+[[package]]
+name = "chat_shared"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
