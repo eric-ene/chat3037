@@ -16,7 +16,9 @@ pub fn connect_init(ip: &'static str, stream_arc: session::StreamType) -> JoinHa
     let stream = loop {
       let stream = TcpStream::connect(ip);
       match stream {
-        Ok(stream) => break stream,
+        Ok(stream) => { 
+          break stream 
+        },
         Err(e) => {
           println!("Error connecting to server: {:?}", e);
           sleep(Duration::from_millis(100));
@@ -25,6 +27,7 @@ pub fn connect_init(ip: &'static str, stream_arc: session::StreamType) -> JoinHa
       }
     };
     
+    
     // get lock on mutex
     let mut guard = stream_arc.lock().unwrap_or_else(|e| { 
       println!("Error locking mutex: {:?}", e);
@@ -32,6 +35,7 @@ pub fn connect_init(ip: &'static str, stream_arc: session::StreamType) -> JoinHa
     });
     
     *guard = Some(stream);
+    drop(guard);
   });
 }
 
@@ -39,10 +43,25 @@ pub fn start_listener(mut stream: session::StreamType, incoming: Arc<Mutex<VecDe
   return thread::spawn(move || {
     loop {
       stream.block_exec(|stream| {
+        println!("New connection from {:?}", stream.peer_addr());
         let mut buf = Vec::new();
         
+        let mut peek_buf = Vec::new();
+        match stream.peek(&mut peek_buf) {
+          Ok(val) => {
+            println!("peek contents: {:?}", peek_buf);
+          }
+          Err(e) => {
+            println!("error reading from stream: {}", e);
+            return;
+          }
+        }
+        
         let n_read = match stream.read_to_end(&mut buf) {
-          Ok(val) => val,
+          Ok(val) => { 
+            println!("Read {} bytes", val);
+            val
+          },
           Err(e) => {
             println!("error reading from stream: {}", e);
             return;
@@ -65,7 +84,10 @@ pub fn start_listener(mut stream: session::StreamType, incoming: Arc<Mutex<VecDe
         };
         
         let processed = match packet.process() {
-          Ok(val) => val,
+          Ok(val) => { 
+            println!("incoming packet {:?}", val);
+            val
+          },
           Err(e) => {
             println!("couldn't process packet: {}", e);
             return;
@@ -79,3 +101,4 @@ pub fn start_listener(mut stream: session::StreamType, incoming: Arc<Mutex<VecDe
     }
   });
 }
+

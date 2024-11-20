@@ -4,6 +4,8 @@ use crate::appstate::session::Session;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::sleep;
+use std::time::Duration;
 use tauri::Manager;
 
 mod appstate;
@@ -23,6 +25,7 @@ pub fn run() {
   let handle = threads::connect_init(SERVER_ADDR, stream.clone());
   handles.push(handle);
   
+  sleep(Duration::from_secs_f32(0.1));
   let handle = threads::start_listener(stream.clone(), incoming.clone());
   handles.push(handle);
   

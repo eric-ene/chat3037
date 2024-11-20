@@ -27,6 +27,7 @@ pub async fn get_identifier(state: State<'_, Mutex<Context>>) -> Result<String, 
   );
   
   for (index, packet) in incoming.iter().enumerate() {
+    println!("{:?}", packet);
     match packet {
       ProcessedPacket::Assign(p) => {
         // do stuff with the packet
