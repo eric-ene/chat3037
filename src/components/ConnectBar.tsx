@@ -13,13 +13,10 @@ export default function ConnectBar(props: {
     function doClick() {
         tryConnect(
             inputVal, 
-            props.nameRef.current?.value || "user",
             props.setConnected,
             props.setOtherUser,
             setConnecting
         ).then();
-        
-        console.log(`name: ${props.nameRef.current?.value}`)
     }
     
     return (
@@ -40,15 +37,14 @@ export default function ConnectBar(props: {
 }
 
 async function tryConnect(
-    val: string, 
-    user: string,
+    dst: string, 
     setConnected: (boolean) => void, 
     setOtherUser: (string) => void,
     setConnecting: (boolean) => void
 ){
     setConnecting(true)
     
-    invoke("try_connect", {seq: val, name: user})
+    invoke("try_connect", { dst })
         .then((other: string) => {
             setConnecting(false)
             setConnected(true)

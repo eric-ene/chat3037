@@ -1,4 +1,5 @@
 use std::net::TcpStream;
+use std::sync::TryLockResult;
 use std::thread::sleep;
 use std::time::Duration;
 use crate::appstate::session;
@@ -6,8 +7,8 @@ use crate::appstate::session::StreamType;
 
 type StreamReturn = ();
 pub trait StreamThreadTools {
-  fn block_exec<F>(&self, f: F) -> StreamReturn
-    where F: Fn(&mut TcpStream) -> StreamReturn;
+  fn block_exec<F, T>(&self, f: F) -> T
+    where F: Fn(&mut TcpStream) -> T;
 }
 
 impl StreamThreadTools for StreamType {
@@ -15,22 +16,25 @@ impl StreamThreadTools for StreamType {
   ///
   /// ### Arguments
   /// * `f` - Closure to execute with the stream
-  fn block_exec<F>(&self, f: F) -> StreamReturn
+  fn block_exec<F, T>(&self, f: F) -> T
   where
-    F: Fn(&mut TcpStream) -> StreamReturn,
+    F: Fn(&mut TcpStream) -> T,
   {
     return loop {
-      let mut guard = self.lock().unwrap_or_else(|e| {
-        println!("Mutex poisoned! {}", e);
-        e.into_inner()
-      });
-
+      let mut guard = match self.try_lock() {
+        Ok(guard) => guard,
+        Err(e) => {
+          continue;
+        }
+      };
+      
       match &mut *guard {
         None => {}
-        Some(stream) => break f(stream),
+        Some(stream) => {
+          break f(stream)
+        },
       }
-
-      sleep(Duration::from_millis(20));
     }
+    
   }
 }
