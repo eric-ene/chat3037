@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+// @ts-expect-error process is a nodejs global
+const PORT = process.env.TAURI_PORT;
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({

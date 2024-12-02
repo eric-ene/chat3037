@@ -34,10 +34,13 @@ body {
 
 #login {
   font-weight: lighter;
-  
-  display: inline-flex;
   float: right;
-  padding-top: 8px;
+  
+  margin-top: 8px;
+  
+  display: grid;
+  grid-template-columns: 200px max-content;
+  
 }
 
 input, button {

@@ -6,6 +6,8 @@
     gap: 5px;
     grid-template-columns: auto;
     grid-template-rows: max-content max-content auto;
+    
+    overflow: hidden;
 }
 
 .connectbar {

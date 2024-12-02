@@ -1,42 +1,56 @@
-use std::net::{TcpListener, TcpStream, UdpSocket};
-use std::sync::Mutex;
-use tauri::Manager;
-use rand::random;
-use crate::appstate::context::Context;
+use std::collections::VecDeque;
+use crate::appstate::context::{Context, Keys};
 use crate::appstate::session::Session;
-use crate::utils::{parse_stun, stun_request};
+use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use tauri::Manager;
 
-mod utils;
 mod appstate;
 mod helpers;
-mod data;
+mod threads;
+mod network;
 
-const STUN_SERVER: &str = "stun.l.google.com:19302";
-pub const MAGIC_COOKIE: u32 = 0x2112A442;
+const SERVER_ADDR: &str = "chat.ericalexander.ca:8081";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let socket = TcpListener::bind("0.0.0.0:0").expect("couldn't bind to socket!");
-
-  let transaction_id = random::<[u8; 12]>();
-  let request = stun_request(1, 0, transaction_id);
-  let mut stream = TcpStream::connect(STUN_SERVER);
-  // socket.send_to(&request, STUN_SERVER).expect("couldn't send STUN request!");
-
-  let addr = parse_stun(&socket, MAGIC_COOKIE.to_be_bytes());
-  println!("your code: {}", addr.as_sequence());
+  let handles = Arc::new(Mutex::new(Vec::new()));
+  let mut hand = handles.lock().unwrap();
   
+  let incoming = Arc::new(Mutex::new(VecDeque::new()));
+  let stream = Arc::new(Mutex::new(None));
+  
+  let handle = threads::connect_init(SERVER_ADDR, stream.clone());
+  hand.push(handle);
+  drop(hand);
+  
+  let inner_handles = handles.clone();
+
   tauri::Builder::default()
     .setup(
       move |app| {
+        let keys = Arc::new(Mutex::new(Keys {
+          server_key: None,
+          chat_key: None,
+          req_key: None,
+          req_cipher: None,
+          req_private: None,
+        }));
+        
+        let handle = threads::start_listener(app.handle().clone(), stream.clone(), incoming.clone(), keys.clone());
+        let mut hand = inner_handles.lock().unwrap();
+        hand.push(handle);
+        drop(hand);
+        
         app.manage(
           Mutex::new(
             Context {
-              session: Session {
-                src: Some(addr),
-                dst: None,
-                sock: socket
-              }
+              app: app.handle().clone(),
+              id: None,
+              name: None,
+              session: Session::new(stream.clone(), incoming.clone()),
+              keys
             }
           )
         );
@@ -46,9 +60,17 @@ pub fn run() {
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![
-      utils::generate_identifier,
-      helpers::network::try_connect,
+      network::tauri::get_identifier,
+      network::tauri::request_name,
+      network::tauri::try_connect,
+      network::tauri::handle_request,
+      network::tauri::send_message
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+  
+  let mut hand = handles.lock().unwrap();
+  for handle in hand.drain(..) {
+    let _ = handle.join();
+  }
 }
