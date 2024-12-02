@@ -8,6 +8,7 @@ export default function ConnectBar(props: {
     nameRef: MutableRefObject<HTMLInputElement | null>,
     setConnected: (boolean) => void,
     setOtherUser: (string) => void
+    setOtherId: (string) => void,
 }) {
     const [inputVal, setInputVal] = useState("");
     const [connecting, setConnecting] = useState(false)
@@ -51,6 +52,7 @@ async function tryConnect(
             setConnecting(false)
             setConnected(true)
             setOtherUser(other)
+            setOtherId(other)
         })
         .catch((error: string) => {
             setConnecting(false)

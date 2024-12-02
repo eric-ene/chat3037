@@ -27,7 +27,7 @@ export default function Body(props: {nameRef: MutableRefObject<HTMLInputElement 
     return (
       <div className={"body"}>
           <p>Connected to {connected ? other : "nobody"}.</p>
-          <ConnectBar nameRef={props.nameRef} setConnected={setConnected} setOtherUser={setOther}/>
+          <ConnectBar nameRef={props.nameRef} setConnected={setConnected} setOtherUser={setOther} setOtherId={setOtherId}/>
           {
               connected 
               ? <Chatbox other={other} otherId={otherId}/>
