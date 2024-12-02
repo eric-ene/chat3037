@@ -1,13 +1,12 @@
 import './MsgRequest.css'
 import {useEffect, useState} from "react";
-import {invoke} from "@tauri-apps/api/core";
 
 const timeout = 5;
 const rate = 10;
 
-export default function MsgRequest(props: { key: boolean, nameFrom: string, onEmpty: () => void, onAccept: (bool) => void }) { 
+export default function MsgRequest(props: { reqKey: boolean, nameFrom: string, onEmpty: () => void, onAccept: (accept: boolean) => void }) { 
     let [value, setValue] = useState(timeout);
-    let [max, setMax] = useState(timeout);
+    let [max, _setMax] = useState(timeout);
     
     useEffect(() => {
         const interval = setInterval(() => {
