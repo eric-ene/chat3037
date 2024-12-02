@@ -1,14 +1,12 @@
-import {MutableRefObject, useEffect, useState} from "react";
+import {MutableRefObject, useState} from "react";
 import {invoke} from "@tauri-apps/api/core";
 import {message} from "@tauri-apps/plugin-dialog"
-import {listen} from "@tauri-apps/api/event";
-import {ConnectedPayload} from "../Classes.ts";
 
 export default function ConnectBar(props: {
     nameRef: MutableRefObject<HTMLInputElement | null>,
-    setConnected: (boolean) => void,
-    setOtherUser: (string) => void
-    setOtherId: (string) => void,
+    setConnected: (val: boolean) => void,
+    setOtherUser: (val: string) => void
+    setOtherId: (val: string) => void,
 }) {
     const [inputVal, setInputVal] = useState("");
     const [connecting, setConnecting] = useState(false)
@@ -42,15 +40,15 @@ export default function ConnectBar(props: {
 
 async function tryConnect(
     dst: string, 
-    setConnected: (boolean) => void, 
-    setOtherUser: (string) => void,
-    setOtherId: (string) => void,
-    setConnecting: (boolean) => void
+    setConnected: (val: boolean) => void, 
+    setOtherUser: (val: string) => void,
+    setOtherId: (val: string) => void,
+    setConnecting: (val: boolean) => void
 ){
     setConnecting(true)
     
-    invoke("try_connect", { dst })
-        .then((other: string) => {
+    invoke<string>("try_connect", { dst })
+        .then((other) => {
             setConnecting(false)
             setConnected(true)
             setOtherUser(other)
@@ -62,7 +60,6 @@ async function tryConnect(
             setOtherUser("")
             message(`Error connecting to target.\n${error}`, { 
                 title: "Connection Error",
-                type: "warning",
             })
         });
 }

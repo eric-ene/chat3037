@@ -6,7 +6,6 @@ import {emit, listen} from "@tauri-apps/api/event";
 import {ConnectedPayload, HandshakePayload, LoadState} from "../Classes.ts";
 
 
-
 export default function Header(props: {nameRef: MutableRefObject<HTMLInputElement | null>}) {
     const [id, setId] = useState("loading...");
     const [loading, setLoading] = useState(LoadState.NotLoading);
@@ -16,12 +15,19 @@ export default function Header(props: {nameRef: MutableRefObject<HTMLInputElemen
     const [requestId, setRequestId] = useState("NO ID");
     const [requestActive, setRequestActive] = useState(false);
     const [requestKey, setRequestKey] = useState(true);
-    
-    const handshakeListener = listen<HandshakePayload>("handshake", (evt) => {
-        if (evt.payload.status === "Request") {
-            startTimer(evt.payload.sender, evt.payload.id);
+
+    useEffect(() => {
+        const handshakeListener = listen<HandshakePayload>("handshake", (evt) => {
+            if (evt.payload.status === "Request") {
+                startTimer(evt.payload.sender, evt.payload.id);
+            }
+        });
+        
+        return () => {
+            handshakeListener.then(f => f())
         }
-    });
+    }, []);
+
     
     useEffect(() => {
         // TODO: This is stupid. I'll emit an event instead if I have time.
@@ -93,14 +99,10 @@ export default function Header(props: {nameRef: MutableRefObject<HTMLInputElemen
             </div>
             <p>Your ID is {id}</p>
             {
-                requestActive && <MsgRequest key={requestKey} nameFrom={requestName} onEmpty={onTimerDone} onAccept={onAccept}/>
+                requestActive && <MsgRequest reqKey={requestKey} nameFrom={requestName} onEmpty={onTimerDone} onAccept={onAccept}/>
             }
         </div>
     );
-}
-
-function startCountdown(maxSeconds: number, value: number) {
-    
 }
 
 function onClick(
@@ -119,7 +121,6 @@ function onClick(
             setLoading(LoadState.NotLoading)
             message(`${error}`, {
                 title: "Couldn't claim name!",
-                type: "warning",
-            })
+            }).then();
         });
 }

@@ -5,18 +5,18 @@ export enum LoadState {
 }
 
 export class MessagePayload {
-    content: string
+    content: string = "";
 }
 
 export class HandshakePayload {
-    status: string;
-    sender: string;
-    id: string;
+    status: string = "";
+    sender: string = "";
+    id: string = "";
 }
 
 export class ConnectedPayload {
-    name: string;
-    id: string;
+    name: string = "";
+    id: string = "";
 
     public constructor(name: string, id: string) {
         this.name = name;
@@ -25,8 +25,8 @@ export class ConnectedPayload {
 }
 
 export class Message {
-    id: number
-    sender: string;
-    dst: string;
-    content: string;
+    id: number = 0;
+    sender: string = "";
+    dst: string = "";
+    content: string = "";
 }

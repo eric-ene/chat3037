@@ -1,5 +1,5 @@
 import './Chatbox.css'
-import {useRef, useState, KeyboardEvent, ChangeEvent, useEffect} from "react";
+import {ChangeEvent, KeyboardEvent, useEffect, useRef, useState} from "react";
 import {invoke} from "@tauri-apps/api/core";
 import {Message, MessagePayload} from "../Classes.ts";
 import {listen} from "@tauri-apps/api/event";
