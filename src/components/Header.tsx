@@ -2,18 +2,10 @@ import {invoke} from "@tauri-apps/api/core";
 import {MutableRefObject, useEffect, useRef, useState} from "react";
 import {message} from "@tauri-apps/plugin-dialog";
 import MsgRequest from "./MsgRequest.tsx";
-import {listen} from "@tauri-apps/api/event";
+import {emit, listen} from "@tauri-apps/api/event";
+import {ConnectedPayload, HandshakePayload, LoadState} from "../Classes.ts";
 
-enum LoadState {
-    NotLoading,
-    Loading,
-    Done
-}
 
-class HandshakePayload {
-    status: string;
-    sender: string;
-}
 
 export default function Header(props: {nameRef: MutableRefObject<HTMLInputElement | null>}) {
     const [id, setId] = useState("loading...");
@@ -21,16 +13,18 @@ export default function Header(props: {nameRef: MutableRefObject<HTMLInputElemen
     const buttonRef = useRef<HTMLButtonElement | null>(null);
 
     const [requestName, setRequestName] = useState("PLACEHOLDER");
+    const [requestId, setRequestId] = useState("NO ID");
     const [requestActive, setRequestActive] = useState(false);
     const [requestKey, setRequestKey] = useState(true);
     
     const handshakeListener = listen<HandshakePayload>("handshake", (evt) => {
         if (evt.payload.status === "Request") {
-            startTimer(evt.payload.sender);
+            startTimer(evt.payload.sender, evt.payload.id);
         }
     });
     
     useEffect(() => {
+        // TODO: This is stupid. I'll emit an event instead if I have time.
         async function applyId() {
             invoke<string>("get_identifier")
                 .then((val) => {
@@ -56,10 +50,20 @@ export default function Header(props: {nameRef: MutableRefObject<HTMLInputElemen
         setRequestKey(val => !val);
     }
     
-    function startTimer(name: string) {
+    function startTimer(name: string, id: string) {
         setRequestName(name);
+        setRequestId(id);
         setRequestActive(true);
         resetTimer();
+    }
+    
+    async function onAccept(accept: boolean) {
+        onTimerDone();
+        invoke('handle_request', { dst: requestId, accept: accept })
+            .then(() => {
+                emit('connected', new ConnectedPayload(requestName))
+            })
+            .catch(console.log)
     }
     
     return (
@@ -88,9 +92,8 @@ export default function Header(props: {nameRef: MutableRefObject<HTMLInputElemen
             </div>
             <p>Your ID is {id}</p>
             {
-                requestActive && <MsgRequest key={requestKey} nameFrom={requestName} onEmpty={onTimerDone}/>
+                requestActive && <MsgRequest key={requestKey} nameFrom={requestName} onEmpty={onTimerDone} onAccept={onAccept}/>
             }
-            <button onClick={resetTimer}>reset</button>
         </div>
     );
 }

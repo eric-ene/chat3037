@@ -1,25 +1,18 @@
 use std::net::TcpStream;
-use std::sync::TryLockResult;
+use std::sync::{Arc, Mutex, TryLockResult};
 use std::thread::sleep;
 use std::time::Duration;
+use chat_shared::stream::read::SharedStream;
 use crate::appstate::session;
 use crate::appstate::session::StreamType;
 
-type StreamReturn = ();
 pub trait StreamThreadTools {
-  fn block_exec<F, T>(&self, f: F) -> T
-    where F: Fn(&mut TcpStream) -> T;
+  
+  fn wait_for(&self) -> SharedStream;
 }
 
 impl StreamThreadTools for StreamType {
-  /// Blocks the thread until stream_arc is not none, and once stream_arc is some, executes the provided closure with it.
-  ///
-  /// ### Arguments
-  /// * `f` - Closure to execute with the stream
-  fn block_exec<F, T>(&self, f: F) -> T
-  where
-    F: Fn(&mut TcpStream) -> T,
-  {
+  fn wait_for(&self) -> SharedStream {
     return loop {
       let mut guard = match self.try_lock() {
         Ok(guard) => guard,
@@ -28,13 +21,12 @@ impl StreamThreadTools for StreamType {
         }
       };
       
-      match &mut *guard {
+      match &*guard {
         None => {}
         Some(stream) => {
-          break f(stream)
+          break stream.clone();
         },
       }
     }
-    
   }
 }

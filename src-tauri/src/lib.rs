@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use crate::appstate::context::Context;
+use crate::appstate::context::{Context, Keys};
 use crate::appstate::session::Session;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
@@ -30,7 +30,15 @@ pub fn run() {
   tauri::Builder::default()
     .setup(
       move |app| {
-        let handle = threads::start_listener(app.handle().clone(), stream.clone(), incoming.clone());
+        let keys = Arc::new(Mutex::new(Keys {
+          server_key: None,
+          chat_key: None,
+          req_key: None,
+          req_cipher: None,
+          req_private: None,
+        }));
+        
+        let handle = threads::start_listener(app.handle().clone(), stream.clone(), incoming.clone(), keys.clone());
         let mut hand = inner_handles.lock().unwrap();
         hand.push(handle);
         drop(hand);
@@ -38,9 +46,11 @@ pub fn run() {
         app.manage(
           Mutex::new(
             Context {
+              app: app.handle().clone(),
               id: None,
               name: None,
-              session: Session::new(stream.clone(), incoming.clone())
+              session: Session::new(stream.clone(), incoming.clone()),
+              keys
             }
           )
         );
@@ -53,6 +63,7 @@ pub fn run() {
       network::tauri::get_identifier,
       network::tauri::request_name,
       network::tauri::try_connect,
+      network::tauri::handle_request,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

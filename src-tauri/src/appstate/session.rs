@@ -3,17 +3,18 @@ use std::sync::{Arc, LockResult, Mutex};
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
 use chat_shared::packet::{Packet, PacketType, ProcessedPacket};
+use crate::helpers::shared_tools::SharedVec;
 
-pub type StreamType = Arc<Mutex<Option<TcpStream>>>;
+pub type StreamType = Arc<Mutex<Option<Arc<Mutex<TcpStream>>>>>;
 
 pub struct Session {
   
   pub stream: StreamType,
-  pub incoming: Arc<Mutex<VecDeque<ProcessedPacket>>>
+  pub incoming: SharedVec<ProcessedPacket>
 }
 
 impl Session {
-  pub fn new(stream: StreamType, incoming: Arc<Mutex<VecDeque<ProcessedPacket>>>) -> Self {
+  pub fn new(stream: StreamType, incoming: SharedVec<ProcessedPacket>) -> Self {
     return Self {
       stream,
       incoming
@@ -57,3 +58,4 @@ impl Session {
     return Err(format!("Timed out after: {}", start.elapsed().as_secs()));
   }
 }
+

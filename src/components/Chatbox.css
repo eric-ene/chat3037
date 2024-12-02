@@ -1,6 +1,7 @@
 @font-face {
     font-family: JetBrainsMono;
-    src: url("public/JetBrainsMono[wght].ttf");
+    /* noinspection CssUnknownTarget */
+    src: url("JetBrainsMono[wght].ttf");
 }
 
 .chatbox {
@@ -42,4 +43,10 @@ input.send {
     
     grid-column-start: 1;
     grid-column-end: span 2;
+}
+
+.message {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    grid-gap: 5px;
 }

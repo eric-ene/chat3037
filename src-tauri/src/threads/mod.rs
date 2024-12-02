@@ -1,19 +1,25 @@
+use crate::appstate::context::Keys;
 use crate::appstate::session;
+use crate::helpers::events::{ConnectedPayload, HandshakeEvent};
 use crate::network::stream::StreamThreadTools;
+use chat_shared::packet::assign::AssignRequestPacket;
+use chat_shared::packet::handshake::HandshakeStatus;
+use chat_shared::packet::{Packet, ProcessedPacket};
+use chat_shared::stream::read::ReadExact;
+use chat_shared::stream::write::SharedWrite;
+use eric_aes::generate_key;
+use eric_aes::rsatools;
+use rsa::traits::{PrivateKeyParts, PublicKeyParts};
+use rsa::RsaPrivateKey;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
-use std::net::{Shutdown, TcpStream};
-use std::process::exit;
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
-use chat_shared::packet::{Packet, PacketSymbols, ProcessedPacket};
-use chat_shared::packet::assign::AssignRequestPacket;
-use chat_shared::packet::handshake::HandshakeStatus;
-use chat_shared::stream::read::{ReadError, ReadUntil};
-use tauri::{App, AppHandle, Emitter};
-use crate::helpers::events::HandshakeEvent;
+use eric_aes::aestools::CryptError;
+use tauri::{AppHandle, Emitter};
 
 pub fn connect_init(ip: &'static str, stream_arc: session::StreamType) -> JoinHandle<()> {
   return thread::spawn(move || {
@@ -30,103 +36,187 @@ pub fn connect_init(ip: &'static str, stream_arc: session::StreamType) -> JoinHa
       }
     };
     println!("connected to server.");
-    
+
     // get lock on mutex
-    let mut guard = stream_arc.lock().unwrap_or_else(|e| { 
+    let mut guard = stream_arc.lock().unwrap_or_else(|e| {
       println!("Error locking mutex: {:?}", e);
-      e.into_inner() 
+      e.into_inner()
     });
-    
+
     println!("stream assigned.");
-    
-    *guard = Some(stream);
+
+    stream.set_nonblocking(true).unwrap();
+    *guard = Some(Arc::new(Mutex::new(stream)));
   });
 }
 
 pub fn start_listener(
   app: AppHandle,
   mut stream: session::StreamType,
-  incoming: Arc<Mutex<VecDeque<ProcessedPacket>>>
+  incoming: Arc<Mutex<VecDeque<ProcessedPacket>>>,
+  keys: Arc<Mutex<Keys>>
 ) -> JoinHandle<()> {
   return thread::spawn(move || {
-    stream.block_exec(|stream| {
-      let request_packet = AssignRequestPacket {};
-      let mut request_raw = ProcessedPacket::new_raw(ProcessedPacket::AssignRequest(request_packet));
-      let mut packet = request_raw.as_slice();
-      
-      loop {
-        match stream.write_all(packet) {
-          Ok(_) => break,
-          Err(e) => {
-            println!("couldn't send packet! {}", e);
-            continue;
-          }
+    let mut rng = rand::thread_rng();;
+    let private_key = RsaPrivateKey::new(&mut rng, 1024).expect("couldn't generate keys!");
+
+    let stream = stream.wait_for();
+
+    let request_packet = AssignRequestPacket {
+      e: private_key.e().to_bytes_be(),
+      n: private_key.n().to_bytes_be(),
+    };
+
+    let request_raw = ProcessedPacket::new_raw(ProcessedPacket::AssignRequest(request_packet));
+
+    loop {
+      match stream.write_all_shared(&request_raw) {
+        Ok(_) => break,
+        Err(e) => {
+          println!("couldn't send packet! {}", e);
+          continue;
         }
       }
-    });
-    
-    stream.block_exec(|stream| stream.set_nonblocking(true).unwrap());
+    }
 
-    let buf = Arc::new(Mutex::new(Vec::new()));
-    let timeout = Duration::from_secs_f32(0.5);
-    
     loop {
-      stream.block_exec(|stream| {
-        let mut buf = buf.lock().unwrap();
-        
-        let n_read = match stream.read_until_timeout(&mut buf, PacketSymbols::Eom, timeout) {
-          Ok(n) => n,
-          Err(e) => match e {
-            ReadError::Timeout => return,
-            ReadError::Other(e) => {
-              println!("couldn't read from stream! {}", e);
-              *buf = Vec::new();
-              return;
-            }
-          }
-        };
+      let mut incoming = match incoming.lock() {
+        Ok(mut guard) => guard,
+        Err(e) => return
+      };
 
-        if n_read == 0 {
+      let buf = match stream.read_packet() {
+        Ok(vec) => vec,
+        Err(e) => { println!("Couldn't read packet! {}", e); continue }
+      };
+
+      let packet = Packet::from_rsa_bytes(&buf, &private_key.d().to_bytes_be(), &private_key.n().to_bytes_be());
+
+      let processed = match packet.process() {
+        Ok(val) => val,
+        Err(e) => {
+          println!("couldn't process packet: {}", e);
           return;
         }
+      };
 
-        if n_read < 8 {
-          println!("mangled packet! size {} is too small!", n_read);
+      match processed {
+        ProcessedPacket::Assign(assign) => {
+          let mut keys = match keys.lock() {
+            Ok(guard) => guard,
+            Err(e) => { println!("Couldn't lock keys! {}", e); return; }
+          };
+
+          keys.server_key = Some(assign.aes_key.clone());
+
+          // TODO: Emit an event here if there's time.
+
+          incoming.push_back(ProcessedPacket::Assign(assign));
+          break;
+        }
+        _ => println!("Received non-naming packet too early!")
+      }
+    }
+
+    // main event loop
+    loop {
+      let mut buf = match stream.read_packet() {
+        Ok(vec) => vec,
+        Err(e) => { println!("Couldn't read packet! {}", e); continue }
+      };
+
+      let keys_guard = match keys.lock() {
+        Ok(guard) => guard,
+        Err(e) => {  { println!("Couldn't lock keys! {}", e); return; } }
+      };
+
+      let key = match &keys_guard.server_key {
+        Some(key) => key,
+        None => {
+          println!("No server key!"); continue;
+        }
+      };
+
+      let packet = match Packet::from_aes_bytes(&mut buf, &key) {
+        Ok(packet) => packet,
+        Err(e) => {
+          println!("Couldn't decrypt! Skipping. {:?}", e);
+          continue;
+        }
+      };
+
+      drop(keys_guard);
+
+      let mut incoming = match incoming.lock() {
+        Ok(mut guard) => guard,
+        Err(e) => return
+      };
+
+      let processed = match packet.process() {
+        Ok(val) => val,
+        Err(e) => {
+          println!("couldn't process packet: {}", e);
           return;
         }
+      };
 
-        let packet = Packet::from_bytes(&mut buf);
-        let mut incoming = match incoming.lock() {
-          Ok(mut guard) => guard,
-          Err(e) => return
-        };
-        
-        let processed = match packet.process() {
-          Ok(val) => val,
-          Err(e) => {
-            println!("couldn't process packet: {}", e);
-            return;
+      // println!("received packet {:?}", processed);
+
+      match processed {
+        ProcessedPacket::Handshake(pack) => match pack.status {
+          HandshakeStatus::Request => { // RECIPIENT - GENERATES KEY
+            let src = pack.src;
+            let id = src.clone().id.unwrap_or(String::from("NO USER ID"));
+
+            let key = generate_key();
+            println!("Before encryption: {:?}", key);
+            let key_ciphertext = rsatools::encrypt_key(&key, &pack.e, &pack.n);
+
+            let mut keys_lock = match keys.lock() {
+              Ok(guard) => guard,
+              Err(e) => {
+                println!("Can't lock keys! Ignoring packet! {}", e);
+                continue;
+              }
+            };
+
+            keys_lock.req_key = Some(key);
+            keys_lock.req_cipher = Some(key_ciphertext);
+            drop(keys_lock);
+
+            let payload = HandshakeEvent {
+              status: HandshakeStatus::Request,
+              sender: format!("{}", src),
+              id
+            };
+
+            let _ = app.emit("handshake", payload);
           }
-        };
+          HandshakeStatus::Accept => { // INITIATOR
+            let mut guard = match keys.lock() {
+              Ok(guard) => guard,
+              Err(e) => { println!("Can't lock keys! Ignoring acceptance packet"); continue; }
+            };
 
-        println!("received packet {:?}", processed);
-        
-        match processed {
-          ProcessedPacket::Handshake(pack) => match pack.status {
-            HandshakeStatus::Request => { // needs to be handled immediately
-              let payload = HandshakeEvent {
-                status: HandshakeStatus::Request,
-                sender: format!("{}", pack.src),
-              };
-              
-              println!("emitting event");
-              let _ = app.emit("handshake", payload);
+            let rsa_key = match &guard.req_private {
+              Some(val) => val,
+              None => { println!("No private key registered. Ignoring acceptance packet"); continue; }
+            };
+
+            let aes_key = rsatools::decrpyt_key(&pack.aes_key, &rsa_key.d().to_bytes_be(), &rsa_key.n().to_bytes_be());
+            println!("decrypted: {:?}", aes_key);
+
+            guard.chat_key = Some(aes_key);
+
+            match app.emit("handshake-accepted", {}) {
+              Ok(_) => println!("event emitted."),
+              Err(e) =>  println!("couldn't emit event! {}", e),
             }
-            _ => incoming.push_back(ProcessedPacket::Handshake(pack))
           }
-          pack => incoming.push_back(pack)
-        };
-      });
+          _ => incoming.push_back(ProcessedPacket::Handshake(pack))
+        }
+        pack => incoming.push_back(pack)
+      };
     }
   });
 }

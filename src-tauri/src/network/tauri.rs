@@ -1,17 +1,26 @@
 use crate::appstate::context::Context;
-use crate::network::stream::StreamThreadTools;
+use crate::helpers::shared_tools::SharedVecTools;
 use chat_shared::packet::assign::{NameRequestPacket, NameResponse};
 use chat_shared::packet::handshake::{HandshakePacket, HandshakeStatus};
 use chat_shared::packet::{PacketType, ProcessedPacket};
 use chat_shared::user::User;
-use std::fmt::format;
+use rand::thread_rng;
+use rsa::traits::PublicKeyParts;
+use rsa::RsaPrivateKey;
 use std::io::Write;
-use std::net::TcpStream;
 use std::string::ToString;
-use std::sync::{Arc, LockResult, Mutex, MutexGuard};
+use std::sync::{Arc, LockResult, Mutex};
 use std::thread::sleep;
-use std::time::Duration;
-use tauri::State;
+use std::time::{Duration, Instant};
+use chat_shared::packet::encrypt::EncryptedPacket;
+use eric_aes::generate_key;
+use tauri::{Listener, State};
+use tokio::time::timeout;
+
+#[tauri::command]
+pub async fn send_message(state: State<'_, Mutex<Context>>) -> Result<String, String> {
+  unimplemented!();
+}
 
 #[tauri::command]
 pub async fn get_identifier(state: State<'_, Mutex<Context>>) -> Result<String, String> {
@@ -25,7 +34,7 @@ pub async fn get_identifier(state: State<'_, Mutex<Context>>) -> Result<String, 
     there are no packets (server is down)\n or \
     because the client is asking for a name multiple times.".to_string()
   );
-  
+
   let packet = match ctx.session.remove_first(PacketType::NameAssign) {
     Some(packet) => packet,
     None => return retval,
@@ -57,15 +66,28 @@ pub async fn request_name(state: State<'_, Mutex<Context>>, name: String) -> Res
     content: name.clone()
   };
 
-  let packet = ProcessedPacket::new_raw(ProcessedPacket::NameRequest(request_packet));
+  let keys_guard = match ctx.keys.lock() {
+    Ok(guard) => guard,
+    Err(e) => return Err(e.to_string())
+  };
 
-  let write_result =  ctx.session.stream.block_exec::<_, Result<(), String>>(|stream| {
-    return match stream.write_all(&packet) {
-      Ok(_) => Ok(()),
-      Err(e) => Err(format!("Couldn't write to stream: {}", e)),
-    }
-  });
-  
+  let key = match &keys_guard.server_key {
+    Some(key) => key,
+    None => return Err("No server key!".to_string())
+  };
+
+  let packet = match ProcessedPacket::new_raw_aes(ProcessedPacket::NameRequest(request_packet), &key) {
+    Ok(pack) => pack,
+    Err(e) => return Err(format!("{:?}", e))
+  };
+
+  drop(keys_guard);
+
+  let write_result = match ctx.send_packet(&packet) {
+    Ok(_) => Ok(()),
+    Err(e) => Err(format!("Couldn't write to stream: {}", e)),
+  };
+
   if write_result.is_err() {
     return write_result;
   }
@@ -74,12 +96,12 @@ pub async fn request_name(state: State<'_, Mutex<Context>>, name: String) -> Res
     Ok(packet) => packet,
     Err(e) => return Err(e)
   };
-  
+
   let packet = match packet {
     ProcessedPacket::NameResponse(packet) => packet,
     _ => return Err("Packet doesn't match!".to_string()),
   };
-  
+
   return match packet.status {
     NameResponse::Success => {
       ctx.name = Some(name.clone());
@@ -90,55 +112,163 @@ pub async fn request_name(state: State<'_, Mutex<Context>>, name: String) -> Res
 }
 
 #[tauri::command]
-pub async fn try_connect(state: State<'_, Mutex<Context>>, dst: String) -> Result<(), String> {
+/// INITIATOR - REQUESTS AN AES KEY
+pub async fn try_connect(state: State<'_, Mutex<Context>>, dst: String) -> Result<String, String> {
   let ctx = match state.lock() {
     Ok(guard) => guard,
     Err(e) => return Err(format!("Couldn't lock state mutex: {}", e))
   };
-  
+
   let id = match &ctx.id {
     Some(id) => id.clone(),
     None => return Err("Wait for the server to assign you an ID!".to_string())
   };
-  
+
   let src = User {
     id: Some(id),
     name: ctx.name.clone()
   };
 
+  let rsa_key = RsaPrivateKey::new(&mut thread_rng(), 1024).map_err(|e| e.to_string())?;
+  let e = rsa_key.e().to_bytes_be();
+  let n = rsa_key.n().to_bytes_be();
+
   let handshake = HandshakePacket {
     status: HandshakeStatus::Request,
     src,
-    dst
+    dst: dst.clone(),
+    e: e.clone(),
+    n: n.clone(),
+    aes_key: vec![]
   };
-  
-  let packet = ProcessedPacket::new_raw(ProcessedPacket::Handshake(handshake));
-  
-  let write_result = ctx.session.stream.block_exec(|stream| {
-    return match stream.write_all(&packet) {
-      Ok(_) => Ok(()),
-      Err(e) => Err(format!("Couldn't write to stream: {}", e)),
-    };
-  });
+
+  let mut keys_lock = match ctx.keys.lock() {
+    Ok(guard) => guard,
+    Err(e) => return Err(e.to_string())
+  };
+
+  keys_lock.req_private = Some(rsa_key);
+
+  let aes_key = match &keys_lock.server_key {
+    Some(key) => key,
+    None => return Err("No server key!".to_string())
+  };
+
+  let packet = match ProcessedPacket::new_raw_aes(ProcessedPacket::Handshake(handshake), &aes_key) {
+    Ok(pack) => pack,
+    Err(e) => return Err(format!("{:?}", e))
+  };
+
+  drop(keys_lock);
+
+  let write_result = ctx.send_packet(&packet);
 
   if write_result.is_err() {
-    return write_result;
+    return Err(write_result.expect_err("We literally just checked is_err(). How the hell is this panicking?"));
   }
 
-  let packet = match ctx.session.wait_and_remove_first(PacketType::NameResponse, Duration::from_secs_f32(20.0)) {
-    Ok(packet) => packet,
-    Err(e) => return Err(e)
+  let app = ctx.app.clone();
+
+  drop(ctx);
+
+  let timeout = Duration::from_secs_f32(15.0);
+  let received: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+  let rec_clone = received.clone();
+
+  let id = app.listen("handshake-accepted", move |evt| {
+    match rec_clone.lock() {
+      Ok(mut guard) => *guard = true,
+      Err(e) => return
+    }
+  });
+
+  let start = Instant::now();
+  while start.elapsed() < timeout {
+    let flag = match received.lock() {
+      Ok(guard) => guard,
+      Err(e) => return Err(e.to_string())
+    };
+
+    if *flag {
+      println!("acceptance received!");
+      return Ok(dst.clone());
+    }
+
+    drop(flag);
+    sleep(Duration::from_millis(50));
   };
 
-  let packet = match packet {
-    ProcessedPacket::Handshake(packet) => packet,
-    _ => return Err("Packet doesn't match!".to_string()),
+  return Err(format!("Timed out after {:?}", timeout));
+}
+
+/// RECIPIENT
+#[tauri::command]
+pub async fn handle_request(state: State<'_, Mutex<Context>>, dst: String, accept: bool) -> Result<(), String> {
+  let ctx = match state.lock() {
+    Ok(guard) => guard,
+    Err(e) => return Err(format!("Couldn't lock state mutex: {}", e))
   };
-  
-  return match packet.status {
-    HandshakeStatus::Accept => Ok(()),
-    HandshakeStatus::Deny => Err("The other user denied your request.".to_string()),
-    HandshakeStatus::NotFound => Err("User not found.".to_string()),
-    _ => Err("Unexpected error!".to_string())
+
+  let (status, key_cipher) = match accept {
+    true => {
+      let mut keys = match ctx.keys.lock() {
+        Ok(guard) => guard,
+        Err(e) => return Err(e.to_string())
+      };
+
+      keys.chat_key = match &keys.req_key {
+        Some(key) => Some(key.clone()),
+        None => return Err("Request key doesn't exist!".to_string())
+      };
+
+
+      let key_cipher = match &keys.req_cipher {
+        Some(ciphertext) => ciphertext.clone(),
+        None => return Err("Request cipher doesn't exist!".to_string())
+      };
+
+
+      (HandshakeStatus::Accept, key_cipher)
+    },
+    false => (HandshakeStatus::Deny, vec![])
+  };
+
+  let me = User {
+    id: ctx.id.clone(),
+    name: ctx.id.clone(),
+  };
+
+  let handshake_packet = HandshakePacket {
+    status,
+    src: me,
+    dst,
+    aes_key: key_cipher,
+    e: vec![],
+    n: vec![]
+  };
+
+  let mut keys_lock = match ctx.keys.lock() {
+    Ok(guard) => guard,
+    Err(e) => return Err(e.to_string())
+  };
+
+  let aes_key = match &keys_lock.server_key {
+    Some(key) => key,
+    None => return Err("No server key!".to_string())
+  };
+
+  let packet = match ProcessedPacket::new_raw_aes(ProcessedPacket::Handshake(handshake_packet), &aes_key) {
+    Ok(pack) => pack,
+    Err(e) => return Err(format!("{:?}", e))
+  };
+
+  match ctx.send_packet(&packet) {
+    Ok(_) => println!("packet sent successfully"),
+    Err(e) => return Err(e)
+  }
+
+  return match accept {
+    true => Ok(()),
+    false => Err("Rejected".to_string())
   };
 }

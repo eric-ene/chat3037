@@ -1,6 +1,8 @@
-import {MutableRefObject, useState} from "react";
+import {MutableRefObject, useEffect, useState} from "react";
 import {invoke} from "@tauri-apps/api/core";
 import {message} from "@tauri-apps/plugin-dialog"
+import {listen} from "@tauri-apps/api/event";
+import {ConnectedPayload} from "../Classes.ts";
 
 export default function ConnectBar(props: {
     nameRef: MutableRefObject<HTMLInputElement | null>,
@@ -20,7 +22,7 @@ export default function ConnectBar(props: {
     }
     
     return (
-        <div className={"connectbar sidebyside"}>
+        <div className={"connectbar"}>
             <p className={"fit-content"}>Other ID:</p>
             <input 
                 className={"purple-border"} 
@@ -52,6 +54,8 @@ async function tryConnect(
         })
         .catch((error: string) => {
             setConnecting(false)
+            setConnected(false)
+            setOtherUser("")
             message(`Error connecting to target.\n${error}`, { 
                 title: "Connection Error",
                 type: "warning",
