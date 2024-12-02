@@ -12,9 +12,11 @@ export class HandshakePayload {
 
 export class ConnectedPayload {
     name: string;
+    id: string;
 
-    public constructor(name: string) {
+    public constructor(name: string, id: string) {
         this.name = name;
+        this.id = id;
     }
 }
 

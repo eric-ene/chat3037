@@ -8,6 +8,7 @@ import {ConnectedPayload} from "../Classes.ts";
 export default function Body(props: {nameRef: MutableRefObject<HTMLInputElement | null>}) {
     const [connected, setConnected] = useState(false);
     const [other, setOther] = useState("(placeholder)")
+    const [otherId, setOtherId] = useState("[PLACEHOLDER]")
 
     useEffect(() => {
         //listen to a event
@@ -28,7 +29,7 @@ export default function Body(props: {nameRef: MutableRefObject<HTMLInputElement 
           <ConnectBar nameRef={props.nameRef} setConnected={setConnected} setOtherUser={setOther}/>
           {
               connected 
-              ? <Chatbox other={other} />
+              ? <Chatbox other={other} otherId={otherId}/>
               : null
           }
       </div>  

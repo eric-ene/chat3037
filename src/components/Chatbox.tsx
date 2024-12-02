@@ -3,7 +3,7 @@ import {useRef, useState, KeyboardEvent, ChangeEvent} from "react";
 import {invoke} from "@tauri-apps/api/core";
 import {Message} from "../Classes.ts";
 
-export default function Chatbox(props: { other: string }) {
+export default function Chatbox(props: { other: string, otherId: string }) {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [messages, setMessages] = useState<Message[]>([])
     const [currentMessage, setCurrentMessage] = useState("");
@@ -38,7 +38,7 @@ export default function Chatbox(props: { other: string }) {
 
             appendMessage(msg);
             
-            console.log(props.other)
+            console.log(props.otherId)
             
             return;
         }

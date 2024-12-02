@@ -51,6 +51,7 @@ export default function Header(props: {nameRef: MutableRefObject<HTMLInputElemen
     }
     
     function startTimer(name: string, id: string) {
+        console.log(`${name}, ${id}`)
         setRequestName(name);
         setRequestId(id);
         setRequestActive(true);
@@ -61,7 +62,7 @@ export default function Header(props: {nameRef: MutableRefObject<HTMLInputElemen
         onTimerDone();
         invoke('handle_request', { dst: requestId, accept: accept })
             .then(() => {
-                emit('connected', new ConnectedPayload(requestName))
+                emit('connected', new ConnectedPayload(requestName, requestId))
             })
             .catch(console.log)
     }
