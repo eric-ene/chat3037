@@ -58,7 +58,7 @@ export default function Chatbox(props: { other: string, otherId: string }) {
     
     function handleKeyDown(evt: KeyboardEvent<HTMLInputElement>) {
         if (evt.code === 'Enter' && !isWhitespace(currentMessage)) {
-            let msg = generateMessage(props.other, currentMessage);
+            let msg = generateMessage(props.otherId, currentMessage);
             
             setCurrentMessage('');
 
