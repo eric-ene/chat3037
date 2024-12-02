@@ -1,19 +1,20 @@
 use crate::appstate::context::Keys;
 use crate::appstate::session;
-use crate::helpers::events::{ConnectedPayload, HandshakeEvent};
+use crate::helpers::events::{ConnectedPayload, HandshakeEvent, MessagePayload};
 use crate::network::stream::StreamThreadTools;
 use chat_shared::packet::assign::AssignRequestPacket;
 use chat_shared::packet::handshake::HandshakeStatus;
 use chat_shared::packet::{Packet, ProcessedPacket};
 use chat_shared::stream::read::ReadExact;
 use chat_shared::stream::write::SharedWrite;
-use eric_aes::generate_key;
+use eric_aes::{generate_key, aestools};
 use eric_aes::rsatools;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::RsaPrivateKey;
 use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::string::FromUtf8Error;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::{sleep, JoinHandle};
@@ -169,7 +170,6 @@ pub fn start_listener(
             let id = src.clone().id.unwrap_or(String::from("NO USER ID"));
 
             let key = generate_key();
-            println!("Before encryption: {:?}", key);
             let key_ciphertext = rsatools::encrypt_key(&key, &pack.e, &pack.n);
 
             let mut keys_lock = match keys.lock() {
@@ -204,16 +204,42 @@ pub fn start_listener(
             };
 
             let aes_key = rsatools::decrpyt_key(&pack.aes_key, &rsa_key.d().to_bytes_be(), &rsa_key.n().to_bytes_be());
-            println!("decrypted: {:?}", aes_key);
 
             guard.chat_key = Some(aes_key);
 
             match app.emit("handshake-accepted", {}) {
-              Ok(_) => println!("event emitted."),
+              Ok(_) => (),
               Err(e) =>  println!("couldn't emit event! {}", e),
             }
           }
           _ => incoming.push_back(ProcessedPacket::Handshake(pack))
+        }
+        ProcessedPacket::Message(pack) => {
+          let guard = match keys.lock() {
+            Ok(guard) => guard,
+            Err(e) => { println!("Can't lock keys! Ignoring acceptance packet"); continue; }
+          };
+          
+          let key = match &guard.chat_key {
+            Some(val) => val,
+            None => { println!("No chat key registered. Ignoring message packet"); continue; }
+          };
+          
+          let decrypted = match aestools::decrypt(key, pack.content) {
+            Ok(bytes) => bytes,
+            Err(e) => { println!("Couldn't decrypt chat message! {:?}", e); continue; }
+          };
+          
+          drop(guard);
+          
+          let plaintext = match String::from_utf8(decrypted) {
+            Ok(text) => text,
+            Err(e) => { println!("Mangled message! {}", e); continue; }
+          };
+          
+          let _ = app.emit("incoming-message", MessagePayload {
+            content: plaintext
+          });
         }
         pack => incoming.push_back(pack)
       };

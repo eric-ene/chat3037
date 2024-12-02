@@ -1,7 +1,7 @@
 import "./Body.css"
 import Chatbox from "./Chatbox.tsx";
 import ConnectBar from "./ConnectBar.tsx";
-import {MutableRefObject, useEffect, useState} from "react";
+import {MutableRefObject, useEffect, useRef, useState} from "react";
 import {listen} from "@tauri-apps/api/event";
 import {ConnectedPayload} from "../Classes.ts";
 

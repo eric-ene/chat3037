@@ -4,6 +4,10 @@ export enum LoadState {
     Done
 }
 
+export class MessagePayload {
+    content: string
+}
+
 export class HandshakePayload {
     status: string;
     sender: string;

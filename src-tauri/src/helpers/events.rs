@@ -12,3 +12,8 @@ pub struct HandshakeEvent {
 pub struct ConnectedPayload {
   pub name: String,
 }
+
+#[derive(Clone, Serialize,  Deserialize)]
+pub struct MessagePayload {
+  pub content: String,
+}

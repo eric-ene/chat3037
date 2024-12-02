@@ -18,6 +18,7 @@ export default function ConnectBar(props: {
             inputVal, 
             props.setConnected,
             props.setOtherUser,
+            props.setOtherId,
             setConnecting
         ).then();
     }
@@ -43,6 +44,7 @@ async function tryConnect(
     dst: string, 
     setConnected: (boolean) => void, 
     setOtherUser: (string) => void,
+    setOtherId: (string) => void,
     setConnecting: (boolean) => void
 ){
     setConnecting(true)

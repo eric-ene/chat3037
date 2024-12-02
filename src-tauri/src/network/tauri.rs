@@ -13,13 +13,66 @@ use std::sync::{Arc, LockResult, Mutex};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use chat_shared::packet::encrypt::EncryptedPacket;
-use eric_aes::generate_key;
+use chat_shared::packet::message::MessagePacket;
+use eric_aes::aestools;
+use eric_aes::aestools::CryptError;
+use serde::Deserialize;
 use tauri::{Listener, State};
 use tokio::time::timeout;
 
+#[derive(Debug, Deserialize)]
+pub struct Message {
+  pub id: u32,
+  pub sender: String,
+  pub dst: String,
+  pub content: String
+}
+
 #[tauri::command]
-pub async fn send_message(state: State<'_, Mutex<Context>>) -> Result<String, String> {
-  unimplemented!();
+pub async fn send_message(state: State<'_, Mutex<Context>>, message: Message) -> Result<(), String> {
+  let mut ctx = match state.lock() {
+    Ok(guard) => guard,
+    Err(e) => return Err(e.to_string()),
+  };
+
+  let keys_guard = match ctx.keys.lock() {
+    Ok(guard) => guard,
+    Err(e) => return Err(e.to_string())
+  };
+
+  let chat_key = match &keys_guard.chat_key {
+    Some(key) => key,
+    None => return Err("No server key!".to_string())
+  };
+
+  let plaintext = message.content.as_bytes().to_vec();
+  let dst = message.dst;
+  
+  let ciphertext = match aestools::encrypt(&chat_key, plaintext) {
+    Ok(bytes) => bytes,
+    Err(e) => return Err(format!("{:?}", e))
+  };
+  
+  let msg_packet = MessagePacket {
+    receiver: dst,
+    content: ciphertext,
+  };
+
+  let server_key = match &keys_guard.server_key {
+    Some(key) => key,
+    None => return Err("No server key!".to_string())
+  };
+
+  let packet = match ProcessedPacket::new_raw_aes(ProcessedPacket::Message(msg_packet), &server_key) {
+    Ok(pack) => pack,
+    Err(e) => return Err(format!("{:?}", e))
+  };
+  
+  drop(keys_guard);
+  
+  println!("Sent packet.");
+  
+  return ctx.send_packet(&packet);
 }
 
 #[tauri::command]

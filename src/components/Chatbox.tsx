@@ -1,13 +1,39 @@
 import './Chatbox.css'
-import {useRef, useState, KeyboardEvent, ChangeEvent} from "react";
+import {useRef, useState, KeyboardEvent, ChangeEvent, useEffect} from "react";
 import {invoke} from "@tauri-apps/api/core";
-import {Message} from "../Classes.ts";
+import {Message, MessagePayload} from "../Classes.ts";
+import {listen} from "@tauri-apps/api/event";
 
 export default function Chatbox(props: { other: string, otherId: string }) {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [messages, setMessages] = useState<Message[]>([])
     const [currentMessage, setCurrentMessage] = useState("");
     const [id, setId] = useState(0);
+    let scrollRef = useRef<HTMLDivElement | null>(null)
+
+    useEffect(() => {
+        const listener = listen<MessagePayload>('incoming-message', (evt) => {
+            let msg = new Message()
+            msg.sender = props.other;
+            msg.content = evt.payload.content;
+            
+            setId(id => id + 1);
+            msg.id = id;
+            
+            appendMessage(msg);
+        })
+        
+        return () => {
+            listener.then(f => f())
+        }
+    }, []);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            // @ts-ignore
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [messages]);
     
     function generateMessage(dst: string, content: string) {
         let retval = new Message();
@@ -38,7 +64,9 @@ export default function Chatbox(props: { other: string, otherId: string }) {
 
             appendMessage(msg);
             
-            console.log(props.otherId)
+            invoke('send_message', { message: msg })
+                .then(() => {})
+                .catch((err) => console.log(err))
             
             return;
         }
@@ -46,7 +74,7 @@ export default function Chatbox(props: { other: string, otherId: string }) {
     
     return (
         <div className={"chatbox"} onClick={() => inputRef.current?.focus() }>
-            <div className={"chat-window"}>
+            <div className={"chat-window"} ref={scrollRef}>
                 {
                     messages.map((message) => {
                        return <div className={"message sidebyside"}>

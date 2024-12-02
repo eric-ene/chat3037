@@ -64,6 +64,7 @@ pub fn run() {
       network::tauri::request_name,
       network::tauri::try_connect,
       network::tauri::handle_request,
+      network::tauri::send_message
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
