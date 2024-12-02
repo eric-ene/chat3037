@@ -15,6 +15,7 @@ export default function Body(props: {nameRef: MutableRefObject<HTMLInputElement 
         const unlisten = listen<ConnectedPayload>('connected', (evt) => {
             setConnected(true);
             setOther(evt.payload.name)
+            setOtherId(evt.payload.id)
         });
 
         return () => {
